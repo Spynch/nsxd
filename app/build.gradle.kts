@@ -6,6 +6,8 @@
  * This project uses @Incubating APIs which are subject to change.
  */
 
+import org.gradle.jvm.tasks.Jar
+
 val grpcVersion = "1.63.0"
 val protobufJava = "3.25.3"
 
@@ -72,5 +74,24 @@ protobuf {
 
 application {
     // Define the main class for the application.
-    mainClass = "org.jraft.viz.VisualizerDemo"
+    mainClass = "org.jraft.server.NodeMain"
+}
+
+val uberJar = tasks.register<Jar>("uberJar") {
+    archiveFileName.set("app.jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes["Main-Class"] = application.mainClass.get()
+    }
+    from(sourceSets.main.get().output)
+    dependsOn(configurations.runtimeClasspath)
+    from({
+        configurations.runtimeClasspath.get()
+            .filter { it.name.endsWith("jar") }
+            .map { zipTree(it) }
+    })
+}
+
+tasks.named("build") {
+    dependsOn(uberJar)
 }

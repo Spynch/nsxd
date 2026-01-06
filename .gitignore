@@ -1,0 +1,8 @@
+/.gradle/
+/build/
+/app/build/
+*.log
+*.tmp
+.DS_Store
+*.iml
+*.zip
