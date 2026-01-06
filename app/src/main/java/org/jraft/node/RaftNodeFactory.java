@@ -46,6 +46,22 @@ public class RaftNodeFactory {
       Path dataDir,
       StateMachine stateMachine,
       RaftTransport transport) throws IOException {
+    return create(nodeId, peers, dataDir, stateMachine, transport,
+      RaftNode.DEFAULT_MIN_ELECTION_MS, RaftNode.DEFAULT_MAX_ELECTION_MS, RaftNode.DEFAULT_HEARTBEAT_PERIOD_MS);
+  }
+
+  /**
+   * create a raft node with custom timing configuration
+   */
+  public static RaftNode create(
+      String nodeId,
+      List<String> peers,
+      Path dataDir,
+      StateMachine stateMachine,
+      RaftTransport transport,
+      long minElectionMs,
+      long maxElectionMs,
+      long heartbeatMs) throws IOException {
 
     Files.createDirectories(dataDir);
 
@@ -91,7 +107,10 @@ public class RaftNodeFactory {
       transport,
       stateMachine,
       heartbeatTask,
-      electionTimer
+      electionTimer,
+      minElectionMs,
+      maxElectionMs,
+      heartbeatMs
     );
   }
 

@@ -49,6 +49,53 @@ Not yet implemented:
 
 This starts a local web server at `http://localhost:8080` where you can see the cluster state in real-time.
 
+### Building the runnable node JAR
+
+```bash
+# Build a fat JAR with the node entrypoint
+./gradlew :app:uberJar
+
+# Run a single node (example)
+java -jar app/build/libs/app.jar \
+  --NODE_ID=1 \
+  --RAFT_PORT=5001 \
+  --PEERS="1=localhost:5001,2=localhost:5002,3=localhost:5003" \
+  --DATA_DIR=/tmp/jjraft-node1
+```
+
+Environment variables are also supported for the same keys. Optional tuning knobs:
+
+- `ELECTION_TIMEOUT_MIN_MS` / `ELECTION_TIMEOUT_MAX_MS`
+- `HEARTBEAT_MS`
+- `RPC_TIMEOUT_MS`
+
+### Running with Docker Compose
+
+The repository includes a multi-stage `Dockerfile` and `docker-compose.yml` to launch a three-node cluster where each node runs in its own container and persists data to a dedicated volume.
+
+```bash
+# Build images and start the cluster
+docker compose up --build
+
+# Watch logs
+docker compose logs -f
+
+# Restart a single node (example)
+docker compose restart node2
+
+# Stop the cluster
+docker compose down
+```
+
+Each service sets:
+
+- `NODE_ID` — unique node identifier
+- `RAFT_PORT` — gRPC port exposed by the node
+- `PEERS` — comma-separated map of peerId=host:port (must include self)
+- `DATA_DIR` — on-disk storage path inside the container (mounted to a volume)
+
+Volumes `node1-data`, `node2-data`, and `node3-data` keep WAL and metadata across restarts.
+
 ## Architecture
 
 ```

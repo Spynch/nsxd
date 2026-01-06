@@ -1,0 +1,55 @@
+version: "3.9"
+
+x-node-image: &node-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: jjraft-node
+
+services:
+  node1:
+    <<: *node-image
+    container_name: jjraft-node1
+    environment:
+      NODE_ID: "1"
+      RAFT_PORT: 5001
+      PEERS: "1=node1:5001,2=node2:5002,3=node3:5003"
+      DATA_DIR: /data
+    volumes:
+      - node1-data:/data
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+
+  node2:
+    <<: *node-image
+    container_name: jjraft-node2
+    environment:
+      NODE_ID: "2"
+      RAFT_PORT: 5002
+      PEERS: "1=node1:5001,2=node2:5002,3=node3:5003"
+      DATA_DIR: /data
+    volumes:
+      - node2-data:/data
+    ports:
+      - "5002:5002"
+    restart: unless-stopped
+
+  node3:
+    <<: *node-image
+    container_name: jjraft-node3
+    environment:
+      NODE_ID: "3"
+      RAFT_PORT: 5003
+      PEERS: "1=node1:5001,2=node2:5002,3=node3:5003"
+      DATA_DIR: /data
+    volumes:
+      - node3-data:/data
+    ports:
+      - "5003:5003"
+    restart: unless-stopped
+
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:

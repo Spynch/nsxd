@@ -34,10 +34,10 @@ public class RaftNode {
   private final ElectionTimer electionTimer;
 
   private final RepeatingTask heartbeatTask;
-  private static final long HEARTBEAT_PERIOD_MS = 100;
+  private final long heartbeatPeriodMs;
 
-  private static final long MIN_ELECTION_MS = 250;
-  private static final long MAX_ELECTION_MS = 1000;
+  private final long minElectionMs;
+  private final long maxElectionMs;
   private final AtomicInteger electionResetProbe = new AtomicInteger();
 
   private int votesGranted = 0;
@@ -46,15 +46,30 @@ public class RaftNode {
   
 
 
-  public RaftNode(String id, List<String> peers, RaftState state, 
+  public static final long DEFAULT_HEARTBEAT_PERIOD_MS = 100;
+  public static final long DEFAULT_MIN_ELECTION_MS = 250;
+  public static final long DEFAULT_MAX_ELECTION_MS = 1000;
+
+  public RaftNode(String id, List<String> peers, RaftState state,
                   LogStore log, RaftTransport net, StateMachine stateMachine,
                   RepeatingTask heartbeatTask, ElectionTimer electionTimer) {
+    this(id, peers, state, log, net, stateMachine, heartbeatTask, electionTimer,
+      DEFAULT_MIN_ELECTION_MS, DEFAULT_MAX_ELECTION_MS, DEFAULT_HEARTBEAT_PERIOD_MS);
+  }
+
+  public RaftNode(String id, List<String> peers, RaftState state,
+                  LogStore log, RaftTransport net, StateMachine stateMachine,
+                  RepeatingTask heartbeatTask, ElectionTimer electionTimer,
+                  long minElectionMs, long maxElectionMs, long heartbeatPeriodMs) {
     this.id = id; this.peers = peers; this.raftState = state;
     this.stateMachine = stateMachine; this.log = log; this.net = net;
     this.heartbeatTask = heartbeatTask; this.electionTimer = electionTimer;
+    this.minElectionMs = minElectionMs;
+    this.maxElectionMs = maxElectionMs;
+    this.heartbeatPeriodMs = heartbeatPeriodMs;
 
     if (this.electionTimer != null) {
-      this.electionTimer.start(MIN_ELECTION_MS, MAX_ELECTION_MS, this::onElectionTick);
+      this.electionTimer.start(this.minElectionMs, this.maxElectionMs, this::onElectionTick);
     }
   }
 
@@ -106,7 +121,7 @@ public class RaftNode {
     raftState.setLeader(null);
 
     if (electionTimer != null && !electionTimer.isRunning()) {
-      electionTimer.start(MIN_ELECTION_MS, MAX_ELECTION_MS, this::onElectionTick);
+      electionTimer.start(minElectionMs, maxElectionMs, this::onElectionTick);
     } else if (electionTimer != null) {
       electionTimer.reset();
     }
@@ -156,7 +171,7 @@ public class RaftNode {
     sendHeartbeats();
 
     if (heartbeatTask != null && !heartbeatTask.isRunning()) {
-      heartbeatTask.start(this::sendHeartbeats, HEARTBEAT_PERIOD_MS);
+      heartbeatTask.start(this::sendHeartbeats, heartbeatPeriodMs);
     }
   }
 
