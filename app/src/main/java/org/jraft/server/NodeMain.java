@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.jraft.kv.KvStateMachine;
+import org.jraft.metrics.RaftMetrics;
 import org.jraft.net.grpc.GrpcRaftTransport;
 import org.jraft.node.RaftNode;
 import org.jraft.node.RaftNodeFactory;
@@ -21,7 +22,9 @@ public class NodeMain {
 
     String nodeId = require("NODE_ID", cli);
     int raftPort = Integer.parseInt(require("RAFT_PORT", cli));
+    int httpPort = parseInt("HTTP_PORT", cli, parseInt("API_PORT", cli, 8080));
     String peersRaw = require("PEERS", cli);
+    String httpPeersRaw = cli.getOrDefault("HTTP_PEERS", System.getenv("HTTP_PEERS"));
     String dataDirRaw = require("DATA_DIR", cli);
 
     long minElection = parseLong("ELECTION_TIMEOUT_MIN_MS", cli, RaftNode.DEFAULT_MIN_ELECTION_MS);
@@ -30,32 +33,53 @@ public class NodeMain {
     long rpcTimeoutMs = parseLong("RPC_TIMEOUT_MS", cli, 2_000);
 
     Map<String, String> peerTargets = parsePeers(peersRaw, nodeId);
+    Map<String, String> httpPeers = parseAllPeers(httpPeersRaw);
     List<String> peerIds = new ArrayList<>(peerTargets.keySet());
     Collections.sort(peerIds);
+    List<String> allNodeIds = new ArrayList<>(peerTargets.keySet());
+    allNodeIds.add(nodeId);
+    Collections.sort(allNodeIds);
 
     Path dataDir = Paths.get(dataDirRaw);
     System.out.printf("Starting node %s on port %d%n", nodeId, raftPort);
     System.out.printf("Data dir: %s%n", dataDir);
     System.out.printf("Peers: %s%n", peerTargets);
     System.out.printf("Timers: election [%d, %d] ms, heartbeat %d ms%n", minElection, maxElection, heartbeatMs);
+    System.out.printf("HTTP port: %d%n", httpPort);
 
-    try (GrpcRaftTransport transport = new GrpcRaftTransport(peerTargets, rpcTimeoutMs)) {
+    RaftMetrics metrics = new RaftMetrics();
+    try (GrpcRaftTransport transport = new GrpcRaftTransport(peerTargets, rpcTimeoutMs, metrics)) {
+      KvStateMachine kvStateMachine = new KvStateMachine();
       RaftNode node = RaftNodeFactory.create(
         nodeId,
         peerIds,
         dataDir,
-        new KvStateMachine(),
+        kvStateMachine,
         transport,
         minElection,
         maxElection,
-        heartbeatMs
+        heartbeatMs,
+        metrics
       );
 
       RaftRpcServer server = new RaftRpcServer(raftPort, node);
       server.start();
 
+      NodeHttpServer httpServer = new NodeHttpServer(
+        httpPort,
+        nodeId,
+        node,
+        kvStateMachine,
+        httpPeers,
+        allNodeIds,
+        metrics,
+        parseOptionalLong("HTTP_TIMEOUT_MS", cli)
+      );
+      httpServer.start();
+
       Runtime.getRuntime().addShutdownHook(new Thread(() -> {
         System.out.println("Shutting down node " + nodeId);
+        httpServer.stop();
         server.stop();
       }));
 
@@ -95,6 +119,18 @@ public class NodeMain {
     return Long.parseLong(value);
   }
 
+  private static int parseInt(String key, Map<String, String> cli, int defaultVal) {
+    String value = cli.getOrDefault(key, System.getenv(key));
+    if (value == null || value.isBlank()) return defaultVal;
+    return Integer.parseInt(value);
+  }
+
+  private static Long parseOptionalLong(String key, Map<String, String> cli) {
+    String value = cli.getOrDefault(key, System.getenv(key));
+    if (value == null || value.isBlank()) return null;
+    return Long.parseLong(value);
+  }
+
   private static Map<String, String> parsePeers(String peers, String selfId) {
     Objects.requireNonNull(peers, "peers");
     Map<String, String> map = new HashMap<>();
@@ -112,6 +148,24 @@ public class NodeMain {
       if (!peerId.equals(selfId)) {
         map.put(peerId, address);
       }
+    }
+    return map;
+  }
+
+  private static Map<String, String> parseAllPeers(String peers) {
+    Map<String, String> map = new HashMap<>();
+    if (peers == null || peers.isBlank()) return map;
+
+    String[] entries = peers.split(",");
+    for (String entry : entries) {
+      if (entry.isBlank()) continue;
+      String[] kv = entry.split("=", 2);
+      if (kv.length != 2) {
+        throw new IllegalArgumentException("Invalid peer entry: " + entry);
+      }
+      String peerId = kv[0].trim();
+      String address = kv[1].trim();
+      map.put(peerId, address);
     }
     return map;
   }

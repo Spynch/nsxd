@@ -10,6 +10,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import org.jraft.net.RaftTransport;
+import org.jraft.metrics.RaftMetrics;
 import org.jraft.rpc.AppendEntriesRequest;
 import org.jraft.rpc.AppendEntriesResponse;
 import org.jraft.rpc.RaftGrpc;
@@ -31,13 +32,19 @@ public class GrpcRaftTransport implements RaftTransport, AutoCloseable {
   private final Map<String, RaftGrpc.RaftBlockingStub> stubs = new HashMap<>();
   private final ExecutorService executor = Executors.newCachedThreadPool();
   private final long rpcTimeoutMs;
+  private final RaftMetrics metrics;
 
   public GrpcRaftTransport(Map<String, String> peerAddressById) {
-    this(peerAddressById, 2_000);
+    this(peerAddressById, 2_000, null);
   }
 
   public GrpcRaftTransport(Map<String, String> peerAddressById, long rpcTimeoutMs) {
+    this(peerAddressById, rpcTimeoutMs, null);
+  }
+
+  public GrpcRaftTransport(Map<String, String> peerAddressById, long rpcTimeoutMs, RaftMetrics metrics) {
     this.rpcTimeoutMs = rpcTimeoutMs;
+    this.metrics = metrics;
     peerAddressById.forEach((peerId, address) -> {
       HostPort hostPort = parseAddress(address);
       ManagedChannel channel = NettyChannelBuilder.forAddress(hostPort.host(), hostPort.port())
@@ -55,6 +62,7 @@ public class GrpcRaftTransport implements RaftTransport, AutoCloseable {
       System.err.printf("requestVote: unknown peer %s%n", peerId);
       return;
     }
+    if (metrics != null) metrics.incRequestVoteSent();
     dispatch(() -> stub.withDeadlineAfter(rpcTimeoutMs, TimeUnit.MILLISECONDS).requestVote(req), cb, "RequestVote");
   }
 
@@ -65,6 +73,7 @@ public class GrpcRaftTransport implements RaftTransport, AutoCloseable {
       System.err.printf("appendEntries: unknown peer %s%n", peerId);
       return;
     }
+    if (metrics != null) metrics.incAppendEntriesSent();
     dispatch(() -> stub.withDeadlineAfter(rpcTimeoutMs, TimeUnit.MILLISECONDS).appendEntries(req), cb, "AppendEntries");
   }
 
@@ -75,10 +84,21 @@ public class GrpcRaftTransport implements RaftTransport, AutoCloseable {
         cb.accept(resp);
       } catch (StatusRuntimeException e) {
         System.err.printf("%s RPC failed: %s%n", opName, e.getStatus());
+        markFailure(opName);
       } catch (Exception e) {
         System.err.printf("%s RPC error: %s%n", opName, e.getMessage());
+        markFailure(opName);
       }
     });
+  }
+
+  private void markFailure(String opName) {
+    if (metrics == null) return;
+    if ("AppendEntries".equals(opName)) {
+      metrics.incAppendEntriesFailed();
+    } else if ("RequestVote".equals(opName)) {
+      metrics.incRequestVoteFailed();
+    }
   }
 
   @Override

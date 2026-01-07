@@ -1,7 +1,10 @@
 package org.jraft.kv;
 
-import java.util.*;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 import org.jraft.core.StateMachine;
@@ -14,10 +17,12 @@ public final class KvStateMachine implements StateMachine {
 
   private final Map<String, byte[]> store;
   private final Map<String, Dedupe> dedupeStore;
+  private final Map<Long, ApplyResult> results;
 
   public KvStateMachine() {
     this.store = new HashMap<>();
     this.dedupeStore = new HashMap<>();
+    this.results = new ConcurrentHashMap<>();
   }
 
   @Override
@@ -29,7 +34,9 @@ public final class KvStateMachine implements StateMachine {
     // idempotence: return cached result on retry or out-of-order duplicate
     Dedupe prev = dedupeStore.get(client);
     if (prev != null && opId <= prev.opId) {
-      return new ApplyResult(e.getIndex(), prev.ok, prev.value, true);
+      ApplyResult result = new ApplyResult(e.getIndex(), prev.ok, prev.value, true);
+      results.put(e.getIndex(), result);
+      return result;
     }
 
     boolean ok = false;
@@ -70,7 +77,9 @@ public final class KvStateMachine implements StateMachine {
     }
 
     dedupeStore.put(client, new Dedupe(opId, ok, value));
-    return new ApplyResult(e.getIndex(), ok, value, false);
+    ApplyResult result = new ApplyResult(e.getIndex(), ok, value, false);
+    results.put(e.getIndex(), result);
+    return result;
   }
 
   private static Command parseCommand(LogEntry e) {
@@ -83,4 +92,5 @@ public final class KvStateMachine implements StateMachine {
 
   public byte[] get(String key) { return store.get(key); }
   public Map<String, byte[]> snapshotView() { return Collections.unmodifiableMap(store); }
+  public ApplyResult getResult(long index) { return results.get(index); }
 }
