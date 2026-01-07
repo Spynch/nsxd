@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run all scenarios and produce artifacts/<run_ts>/summary.csv
-# Also copies the latest summary to artifacts/summary.csv
+# Runs only toxiproxy-based scenarios (no docker stop/kill/pause)
+# Produces artifacts/<run_ts>/summary.csv and copies to artifacts/summary.csv
 
 RUN_TS="$(date +%Y%m%d_%H%M%S)"
 RUN_DIR="artifacts/${RUN_TS}"
 mkdir -p "$RUN_DIR"
 
-# This env var will be used by scripts/lib.sh -> collect_artifacts (see patch below)
 export ARTIFACTS_RUN_DIR="$RUN_DIR"
 
 source "./scripts/summary.sh"
@@ -21,10 +20,9 @@ run_scenario() {
 
   local leader_before leader_after start end dur
 
-  # best-effort leader detection
   leader_before="$(./scripts/find_leader.sh 2>/dev/null || echo "unknown")"
-
   start="$(date +%s)"
+
   if bash "$script"; then
     end="$(date +%s)"
     dur="$((end-start))"
@@ -34,23 +32,17 @@ run_scenario() {
     end="$(date +%s)"
     dur="$((end-start))"
     leader_after="$(./scripts/find_leader.sh 2>/dev/null || echo "unknown")"
-    summary_append "$RUN_DIR" "$scenario" "FAIL" "$dur" "$leader_before" "$leader_after" "see artifacts for logs/status"
+    summary_append "$RUN_DIR" "$scenario" "FAIL" "$dur" "$leader_before" "$leader_after" "see artifacts for status/log placeholders"
     return 1
   fi
 }
 
-# Optional: ensure cluster is up
-docker compose up -d >/dev/null 2>&1 || true
+# Give cluster a moment
+sleep 2
 
-# Run scenarios
-run_scenario "scenario_smoke" "./scripts/scenario_smoke.sh"
-run_scenario "scenario_kv_replication" "./scripts/scenario_kv_replication.sh"
-run_scenario "scenario_cas" "./scripts/scenario_cas.sh"
-run_scenario "scenario_kill_leader" "./scripts/scenario_kill_leader.sh"
-run_scenario "scenario_pause_follower" "./scripts/scenario_pause_follower.sh"
-run_scenario "scenario_pause_leader" "./scripts/scenario_pause_leader.sh"
-run_scenario "scenario_crash_recovery" "./scripts/scenario_crash_recovery.sh"
-run_scenario "scenario_no_quorum" "./scripts/scenario_no_quorum.sh"
+# Optional: toxiproxy init/reset if you have it
+# bash ./scripts/toxiproxy/setup.sh || true
+
 run_scenario "scenario_partition_2_1" "./scripts/scenario_partition_2_1.sh"
 run_scenario "scenario_partition_isolate_leader" "./scripts/scenario_partition_isolate_leader.sh"
 run_scenario "scenario_latency_instability" "./scripts/scenario_latency_instability.sh"
@@ -58,6 +50,6 @@ run_scenario "scenario_catchup_after_degradation" "./scripts/scenario_catchup_af
 
 summary_finalize "$RUN_DIR"
 
-echo "All scenarios finished."
+echo "Toxiproxy suite finished."
 echo "Summary written to: $RUN_DIR/summary.csv"
 echo "Latest summary copied to: artifacts/summary.csv"

@@ -1,9 +1,38 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# --- Base URLs for nodes (works on host and inside docker tester) ---
+HTTP_NODE1="${HTTP_NODE1:-http://localhost:8081}"
+HTTP_NODE2="${HTTP_NODE2:-http://localhost:8082}"
+HTTP_NODE3="${HTTP_NODE3:-http://localhost:8083}"
+
+node_http_base() {
+  local node="$1"
+  case "$node" in
+    1) echo "$HTTP_NODE1" ;;
+    2) echo "$HTTP_NODE2" ;;
+    3) echo "$HTTP_NODE3" ;;
+    *) echo "unknown-node" ;;
+  esac
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE="${COMPOSE:-docker compose}"
-TOXIPROXY_HOST="${TOXIPROXY_HOST:-localhost:8474}"
+
+# Toxiproxy API host (no scheme). Works on host and inside docker tester.
+# - On host: localhost:8474
+# - In tester: toxiproxy:8474
+if [[ -n "${TOXIPROXY_URL:-}" ]]; then
+  # allow TOXIPROXY_URL like http://toxiproxy:8474
+  TOXIPROXY_HOST="$(echo "$TOXIPROXY_URL" | sed -E 's#^https?://##')"
+else
+  if [[ -n "${IN_DOCKER:-}" ]]; then
+    TOXIPROXY_HOST="${TOXIPROXY_HOST:-toxiproxy:8474}"
+  else
+    TOXIPROXY_HOST="${TOXIPROXY_HOST:-localhost:8474}"
+  fi
+fi
+
 
 NODES=(1 2 3)
 declare -A NODE_HTTP=(
@@ -40,9 +69,10 @@ PY
 }
 
 curl_status() {
-  local node_id="$1"
-  local host="${NODE_HTTP[$node_id]}"
-  curl -sS "http://${host}/status"
+  local node="$1"
+  local base
+  base="$(node_http_base "$node")"
+  curl -fsS "${base}/status"
 }
 
 find_leader() {
@@ -83,8 +113,9 @@ wait_for_single_leader() {
 
 node_url() {
   local node_id="$1"
-  echo "http://${NODE_HTTP[$node_id]}"
+  node_http_base "$node_id"
 }
+
 
 kv_request() {
   local method="$1"
@@ -183,14 +214,30 @@ assert_true() {
 
 collect_artifacts() {
   local scenario="$1"
-  local ts
-  ts="$(date +%Y%m%d_%H%M%S)"
-  local dir="artifacts/${ts}/${scenario}"
+
+  # If run directory is provided (from run_all.sh), store under it.
+  # Otherwise keep legacy behavior: artifacts/<ts>/<scenario>
+  local base_dir
+  if [[ -n "${ARTIFACTS_RUN_DIR:-}" ]]; then
+    base_dir="${ARTIFACTS_RUN_DIR}"
+  else
+    local ts
+    ts="$(date +%Y%m%d_%H%M%S)"
+    base_dir="artifacts/${ts}"
+  fi
+
+  local dir="${base_dir}/${scenario}"
   mkdir -p "$dir"
+
   for node in "${NODES[@]}"; do
     curl_status "$node" > "${dir}/status-node${node}.json" || true
   done
-  ${COMPOSE} logs --no-color > "${dir}/docker-compose.log" || true
+  if command -v docker >/dev/null 2>&1; then
+    ${COMPOSE} logs --no-color > "${dir}/docker-compose.log" || true
+  else
+    echo "docker logs not available in this environment" > "${dir}/docker-compose.log"
+  fi
+
 }
 
 proxy_name() {
