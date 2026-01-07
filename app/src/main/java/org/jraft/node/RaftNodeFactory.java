@@ -8,6 +8,7 @@ import java.util.Objects;
 
 import org.jraft.core.RepeatingTask;
 import org.jraft.core.StateMachine;
+import org.jraft.metrics.RaftMetrics;
 import org.jraft.net.RaftTransport;
 import org.jraft.state.FileLogStore;
 import org.jraft.state.LogStore;
@@ -47,7 +48,7 @@ public class RaftNodeFactory {
       StateMachine stateMachine,
       RaftTransport transport) throws IOException {
     return create(nodeId, peers, dataDir, stateMachine, transport,
-      RaftNode.DEFAULT_MIN_ELECTION_MS, RaftNode.DEFAULT_MAX_ELECTION_MS, RaftNode.DEFAULT_HEARTBEAT_PERIOD_MS);
+      RaftNode.DEFAULT_MIN_ELECTION_MS, RaftNode.DEFAULT_MAX_ELECTION_MS, RaftNode.DEFAULT_HEARTBEAT_PERIOD_MS, null);
   }
 
   /**
@@ -62,6 +63,20 @@ public class RaftNodeFactory {
       long minElectionMs,
       long maxElectionMs,
       long heartbeatMs) throws IOException {
+    return create(nodeId, peers, dataDir, stateMachine, transport,
+      minElectionMs, maxElectionMs, heartbeatMs, null);
+  }
+
+  public static RaftNode create(
+      String nodeId,
+      List<String> peers,
+      Path dataDir,
+      StateMachine stateMachine,
+      RaftTransport transport,
+      long minElectionMs,
+      long maxElectionMs,
+      long heartbeatMs,
+      RaftMetrics metrics) throws IOException {
 
     Files.createDirectories(dataDir);
 
@@ -110,7 +125,8 @@ public class RaftNodeFactory {
       electionTimer,
       minElectionMs,
       maxElectionMs,
-      heartbeatMs
+      heartbeatMs,
+      metrics
     );
   }
 

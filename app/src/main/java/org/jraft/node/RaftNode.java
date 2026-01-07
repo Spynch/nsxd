@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.jraft.core.FollowerHandlers;
 import org.jraft.core.RepeatingTask;
 import org.jraft.core.StateMachine;
+import org.jraft.metrics.RaftMetrics;
 import org.jraft.net.RaftTransport;
 import org.jraft.rpc.AppendEntriesRequest;
 import org.jraft.rpc.AppendEntriesResponse;
@@ -39,6 +40,7 @@ public class RaftNode {
   private final long minElectionMs;
   private final long maxElectionMs;
   private final AtomicInteger electionResetProbe = new AtomicInteger();
+  private final RaftMetrics metrics;
 
   private int votesGranted = 0;
   public final Map<String, Long> nextIndex = new HashMap<>();
@@ -54,19 +56,29 @@ public class RaftNode {
                   LogStore log, RaftTransport net, StateMachine stateMachine,
                   RepeatingTask heartbeatTask, ElectionTimer electionTimer) {
     this(id, peers, state, log, net, stateMachine, heartbeatTask, electionTimer,
-      DEFAULT_MIN_ELECTION_MS, DEFAULT_MAX_ELECTION_MS, DEFAULT_HEARTBEAT_PERIOD_MS);
+      DEFAULT_MIN_ELECTION_MS, DEFAULT_MAX_ELECTION_MS, DEFAULT_HEARTBEAT_PERIOD_MS, null);
   }
 
   public RaftNode(String id, List<String> peers, RaftState state,
                   LogStore log, RaftTransport net, StateMachine stateMachine,
                   RepeatingTask heartbeatTask, ElectionTimer electionTimer,
                   long minElectionMs, long maxElectionMs, long heartbeatPeriodMs) {
+    this(id, peers, state, log, net, stateMachine, heartbeatTask, electionTimer,
+      minElectionMs, maxElectionMs, heartbeatPeriodMs, null);
+  }
+
+  public RaftNode(String id, List<String> peers, RaftState state,
+                  LogStore log, RaftTransport net, StateMachine stateMachine,
+                  RepeatingTask heartbeatTask, ElectionTimer electionTimer,
+                  long minElectionMs, long maxElectionMs, long heartbeatPeriodMs,
+                  RaftMetrics metrics) {
     this.id = id; this.peers = peers; this.raftState = state;
     this.stateMachine = stateMachine; this.log = log; this.net = net;
     this.heartbeatTask = heartbeatTask; this.electionTimer = electionTimer;
     this.minElectionMs = minElectionMs;
     this.maxElectionMs = maxElectionMs;
     this.heartbeatPeriodMs = heartbeatPeriodMs;
+    this.metrics = metrics;
 
     if (this.electionTimer != null) {
       this.electionTimer.start(this.minElectionMs, this.maxElectionMs, this::onElectionTick);
@@ -88,6 +100,7 @@ public class RaftNode {
   }
 
   public void startElection() {
+    if (metrics != null) metrics.incElections();
     raftState.setCurrentTerm(raftState.getCurrentTerm() + 1);
     raftState.setVotedFor(id);
     raftState.becomeCandidate();
@@ -140,7 +153,10 @@ public class RaftNode {
       System.out.println("Not a candidate");
       return;
     }
-    if (!resp.getVoteGranted()) return;
+    if (!resp.getVoteGranted()) {
+      if (metrics != null) metrics.incRequestVoteFailed();
+      return;
+    }
 
     votesGranted++;
     if (votesGranted >= majority()) {
@@ -153,6 +169,7 @@ public class RaftNode {
   private void becomeLeader() {
     raftState.becomeLeader();
     raftState.setLeader(id);
+    if (metrics != null) metrics.incLeaderChanges();
 
     if (electionTimer != null) {
       this.electionTimer.stop();
@@ -251,6 +268,7 @@ public class RaftNode {
       return;
     }
 
+    if (metrics != null) metrics.incAppendEntriesFailed();
     long currentNext = nextIndex.getOrDefault(peerId, 1L);
     if (currentNext > 1) {
       long backedOff = currentNext - 1;   // move left by one
@@ -304,5 +322,6 @@ public class RaftNode {
   public RaftState getRaftState() { return raftState; }
   public LogStore getLog() { return log; }
   public StateMachine getStateMachine() { return stateMachine; }
+  public RaftMetrics getMetrics() { return metrics; }
 
 }

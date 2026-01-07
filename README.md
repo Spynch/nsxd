@@ -25,7 +25,6 @@ The core Raft algorithm is fully implemented and tested. The system can:
 Not yet implemented:
 - Log compaction via snapshotting
 - Cluster membership changes
-- gRPC transport layer (interface exists)
 
 ## Quick Start
 
@@ -77,6 +76,9 @@ The repository includes a multi-stage `Dockerfile` and `docker-compose.yml` to l
 # Build images and start the cluster
 docker compose up --build
 
+# Create toxiproxy proxies (required once after start)
+./scripts/toxiproxy_setup.sh
+
 # Watch logs
 docker compose logs -f
 
@@ -92,9 +94,36 @@ Each service sets:
 - `NODE_ID` — unique node identifier
 - `RAFT_PORT` — gRPC port exposed by the node
 - `PEERS` — comma-separated map of peerId=host:port (must include self)
+- `HTTP_PORT` — HTTP API port inside the container
+- `HTTP_PEERS` — nodeId=host:port for redirects to the leader (defaults used by scripts)
 - `DATA_DIR` — on-disk storage path inside the container (mounted to a volume)
 
 Volumes `node1-data`, `node2-data`, and `node3-data` keep WAL and metadata across restarts.
+
+### HTTP API
+
+Each node exposes a lightweight HTTP API (default ports 8081-8083 via Docker Compose).
+
+Endpoints:
+
+- `GET /status` — nodeId, role, term, leaderId, commitIndex, lastApplied, lastLogIndex, peers
+- `GET /metrics` — electionsTotal, leaderChangesTotal, appendEntriesSent/Failed, requestVoteSent/Failed
+- `PUT /kv/{key}` — write value (body)
+- `GET /kv/{key}` — read value
+- `DELETE /kv/{key}` — delete key
+- `POST /kv/cas` — body: `{"key":"...","expected":"...","value":"..."}`
+
+Followers redirect to the leader (HTTP 307) when required.
+
+### Scenario Testing (Scripts)
+
+All scenarios live in `scripts/` and are designed to run without JUnit.
+
+```bash
+./scripts/run_all.sh
+```
+
+Artifacts are captured under `artifacts/<timestamp>/<scenario>/`.
 
 ## Architecture
 
