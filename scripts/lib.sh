@@ -59,7 +59,15 @@ json_get() {
   python - "$key" <<'PY'
 import json,sys
 key=sys.argv[1]
-data=json.load(sys.stdin)
+raw=sys.stdin.read()
+if not raw.strip():
+  print("")
+  raise SystemExit(0)
+try:
+  data=json.loads(raw)
+except json.JSONDecodeError:
+  print("")
+  raise SystemExit(0)
 val=data.get(key,"")
 if isinstance(val, (list, dict)):
   print(json.dumps(val))
