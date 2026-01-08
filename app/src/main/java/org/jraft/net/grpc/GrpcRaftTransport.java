@@ -52,10 +52,9 @@ public class GrpcRaftTransport implements RaftTransport, AutoCloseable {
     ensureDnsNameResolver();
     peerAddressById.forEach((peerId, address) -> {
       HostPort hostPort = parseAddress(address);
-      String target = "dns:///" + hostPort.host() + ":" + hostPort.port();
-      ManagedChannel channel = NettyChannelBuilder.forTarget(target)
-        .usePlaintext()
-        .build();
+      ManagedChannel channel = NettyChannelBuilder.forAddress(hostPort.host(), hostPort.port())
+              .usePlaintext()
+              .build();
       channels.put(peerId, channel);
       stubs.put(peerId, RaftGrpc.newBlockingStub(channel));
     });
