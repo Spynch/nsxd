@@ -1,5 +1,4 @@
 .git
-.gradle
 build
 app/build
 app/.gradle

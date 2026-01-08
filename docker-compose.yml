@@ -8,7 +8,7 @@ x-node-image: &node-image
 
 services:
   toxiproxy:
-    image: shopify/toxiproxy:2.5.0
+    image: shopify/toxiproxy:latest
     container_name: jjraft-toxiproxy
     ports:
       - "8474:8474"
@@ -91,7 +91,7 @@ services:
       IN_DOCKER: "1"
     entrypoint: ["/bin/sh", "-lc"]
     command: >
-      apk add --no-cache bash curl jq coreutils &&
+      apk add --no-cache bash curl jq coreutils python3&&
       chmod +x scripts/*.sh &&
       chmod +x scripts/**/*.sh 2>/dev/null || true &&
       ./scripts/run_toxiproxy_suite.sh
