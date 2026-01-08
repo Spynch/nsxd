@@ -47,7 +47,8 @@ public class GrpcRaftTransport implements RaftTransport, AutoCloseable {
     this.metrics = metrics;
     peerAddressById.forEach((peerId, address) -> {
       HostPort hostPort = parseAddress(address);
-      ManagedChannel channel = NettyChannelBuilder.forAddress(hostPort.host(), hostPort.port())
+      String target = "dns:///" + hostPort.host() + ":" + hostPort.port();
+      ManagedChannel channel = NettyChannelBuilder.forTarget(target)
         .usePlaintext()
         .build();
       channels.put(peerId, channel);
