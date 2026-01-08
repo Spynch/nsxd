@@ -12,6 +12,11 @@ services:
     container_name: jjraft-toxiproxy
     ports:
       - "8474:8474"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8474/version"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
     restart: unless-stopped
 
   toxiproxy-setup:
@@ -20,7 +25,8 @@ services:
     volumes:
       - ./:/work
     depends_on:
-      - toxiproxy
+      toxiproxy:
+        condition: service_healthy
     environment:
       TOXIPROXY_URL: http://toxiproxy:8474
     entrypoint: ["/bin/sh", "-lc"]
@@ -45,8 +51,10 @@ services:
     ports:
       - "8081:8080"
     depends_on:
-      - toxiproxy
-      - toxiproxy-setup
+      toxiproxy:
+        condition: service_healthy
+      toxiproxy-setup:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   node2:
@@ -64,8 +72,10 @@ services:
     ports:
       - "8082:8080"
     depends_on:
-      - toxiproxy
-      - toxiproxy-setup
+      toxiproxy:
+        condition: service_healthy
+      toxiproxy-setup:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   node3:
@@ -83,8 +93,10 @@ services:
     ports:
       - "8083:8080"
     depends_on:
-      - toxiproxy
-      - toxiproxy-setup
+      toxiproxy:
+        condition: service_healthy
+      toxiproxy-setup:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   tester:
