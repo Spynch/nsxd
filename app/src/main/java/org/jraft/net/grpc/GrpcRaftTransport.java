@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -17,8 +18,10 @@ import org.jraft.rpc.RaftGrpc;
 import org.jraft.rpc.RequestVoteRequest;
 import org.jraft.rpc.RequestVoteResponse;
 
+import io.grpc.NameResolverRegistry;
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
+import io.grpc.internal.DnsNameResolverProvider;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 
 /**
@@ -33,6 +36,7 @@ public class GrpcRaftTransport implements RaftTransport, AutoCloseable {
   private final ExecutorService executor = Executors.newCachedThreadPool();
   private final long rpcTimeoutMs;
   private final RaftMetrics metrics;
+  private static final AtomicBoolean DNS_REGISTERED = new AtomicBoolean(false);
 
   public GrpcRaftTransport(Map<String, String> peerAddressById) {
     this(peerAddressById, 2_000, null);
@@ -45,6 +49,7 @@ public class GrpcRaftTransport implements RaftTransport, AutoCloseable {
   public GrpcRaftTransport(Map<String, String> peerAddressById, long rpcTimeoutMs, RaftMetrics metrics) {
     this.rpcTimeoutMs = rpcTimeoutMs;
     this.metrics = metrics;
+    ensureDnsNameResolver();
     peerAddressById.forEach((peerId, address) -> {
       HostPort hostPort = parseAddress(address);
       String target = "dns:///" + hostPort.host() + ":" + hostPort.port();
@@ -100,6 +105,13 @@ public class GrpcRaftTransport implements RaftTransport, AutoCloseable {
     } else if ("RequestVote".equals(opName)) {
       metrics.incRequestVoteFailed();
     }
+  }
+
+  private static void ensureDnsNameResolver() {
+    if (!DNS_REGISTERED.compareAndSet(false, true)) {
+      return;
+    }
+    NameResolverRegistry.getDefaultRegistry().register(new DnsNameResolverProvider());
   }
 
   @Override
