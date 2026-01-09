@@ -1,0 +1,13 @@
+{
+  "nodeId": "3",
+  "role": "CANDIDATE",
+  "term": 26280,
+  "commitIndex": 1,
+  "lastApplied": 1,
+  "lastLogIndex": 1,
+  "peers": [
+    "1",
+    "2",
+    "3"
+  ]
+}

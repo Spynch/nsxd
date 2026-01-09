@@ -1,0 +1,14 @@
+{
+  "nodeId": "2",
+  "role": "LEADER",
+  "term": 26230,
+  "leaderId": "2",
+  "commitIndex": 1,
+  "lastApplied": 1,
+  "lastLogIndex": 1,
+  "peers": [
+    "1",
+    "2",
+    "3"
+  ]
+}

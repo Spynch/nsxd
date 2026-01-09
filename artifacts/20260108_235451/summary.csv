@@ -1,0 +1,2 @@
+timestamp,scenario,result,duration_sec,leader_before,leader_after,notes
+"2026-01-08T23:55:25+00:00","scenario_partition_2_1","FAIL","32","2","2","see artifacts for status/log placeholders"

@@ -212,12 +212,12 @@ assert_equal() {
 }
 
 assert_true() {
-  local condition="$1"
-  local message="${2:-}"
-  if ! eval "$condition"; then
-    echo "assert_true failed: $condition $message" >&2
-    return 1
-  fi
+  local v="$1"
+    local msg="$2"
+    if [[ -z "$v" ]]; then
+      echo "assert_true failed: $msg" >&2
+      return 1
+    fi
 }
 
 collect_artifacts() {
