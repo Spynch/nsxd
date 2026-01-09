@@ -60,6 +60,7 @@ public class NodeHttpServer {
     this.kvTimeoutMs = kvTimeoutMs != null ? kvTimeoutMs : DEFAULT_KV_TIMEOUT_MS;
 
     this.server = HttpServer.create(new InetSocketAddress(port), 0);
+    server.createContext("/", this::handleRoot);
     server.createContext("/status", this::handleStatus);
     server.createContext("/metrics", this::handleMetrics);
     server.createContext("/kv/cas", this::handleCas);
@@ -74,6 +75,27 @@ public class NodeHttpServer {
 
   public void stop() {
     server.stop(0);
+  }
+
+  private void handleRoot(HttpExchange exchange) throws IOException {
+    if (!exchange.getRequestMethod().equals("GET")) {
+      exchange.sendResponseHeaders(405, -1);
+      return;
+    }
+
+    String path = exchange.getRequestURI().getPath();
+    if (!"/".equals(path)) {
+      sendError(exchange, 404, "not found");
+      return;
+    }
+
+    RootResponse response = new RootResponse();
+    response.message = "jjraft node HTTP API";
+    response.status = "/status";
+    response.metrics = "/metrics";
+    response.kv = "/kv/{key}";
+    response.cas = "/kv/cas";
+    sendJson(exchange, 200, response);
   }
 
   private void handleStatus(HttpExchange exchange) throws IOException {
@@ -343,6 +365,14 @@ public class NodeHttpServer {
 
   private static class ErrorResponse {
     String error;
+  }
+
+  private static class RootResponse {
+    String message;
+    String status;
+    String metrics;
+    String kv;
+    String cas;
   }
 
   private static class LeaderResponse {
